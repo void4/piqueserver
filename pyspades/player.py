@@ -31,6 +31,11 @@ from pyspades.protocol import BaseConnection
 from pyspades.team import Team
 from pyspades.weapon import WEAPONS
 
+import shelve
+import trueskill
+
+db = shelve.open("shelve.db")
+
 log = Logger()
 
 
@@ -1030,6 +1035,36 @@ class ServerConnection(BaseConnection):
         if by is not None and by is not self:
             by.add_score(1)
         kill_action.respawn_time = self.get_respawn_time() + 1
+
+        if kill_action.killer_id != kill_action.player_id:
+            killer = None
+            for player in self.protocol.players.values():
+                if player.player_id == kill_action.killer_id:
+                    killer = player
+
+            try:
+                self_elo = db[self.name]
+            except KeyError:
+                rating = trueskill.Rating()
+                db[self.name] = rating
+
+            try:
+                killer_elo = db[killer.name]
+            except KeyError:
+                rating = trueskill.Rating()
+                db[killer.name] = rating
+
+            a1 = db[killer.name].mu-3*db[killer.name].sigma
+            b1 = db[self.name].mu-3*db[self.name].sigma
+            db[killer.name], db[self.name] = trueskill.rate_1vs1(db[killer.name], db[self.name])
+            a2 = db[killer.name].mu-3*db[killer.name].sigma
+            b2 = db[self.name].mu-3*db[self.name].sigma
+
+            db.sync()
+
+            self.send_chat("ENEMY: %.2f (GOT +%.2f) | YOU: %.2f (LOST %.2f)" % (a2*100, (a2-a1)*100, b2*100, (b2-b1)*100), global_message=True)
+            killer.send_chat("YOU: %.2f (GOT +%.2f) | ENEMY: %.2f (LOST %.2f)" % (a2*100, (a2-a1)*100, b2*100, (b2-b1)*100), global_message=True)
+
         self.protocol.broadcast_contained(kill_action, save=True)
         self.world_object.dead = True
         self.respawn()
