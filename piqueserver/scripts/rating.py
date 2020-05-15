@@ -18,13 +18,16 @@ from piqueserver.config import config
 import shelve
 import trueskill
 
-db = shelve.open("shelve.db")
+
 
 header = "Bottom 1%: 560 | 10%: 1430 | 20%: 1800 | 33%: 2130\nAverage: 2500\nTop 33%: 2870 | 20%: 3200 | 10%: 3560 | 1%: 4430\n"
 
+DBPATH = "shelve.db"
+
 @command('rating')
 def rating(connection, value=None):
-    db.sync()
+    #db.sync()
+    db = shelve.open(DBPATH)
     if value is None:
         if connection not in connection.protocol.players:
             raise ValueError()
@@ -45,7 +48,7 @@ def top(connection, value=None):
         value = 10
     else:
         value = max(1,int(value))
-    db.sync()
+    db = shelve.open(DBPATH)
     sortedscores = sorted(list(db.items()), key=lambda x:x[1].mu-x[1].sigma*3, reverse=True)
     listing = "\n".join(["%.2f\t%s" % ((v.mu-3*v.sigma)*100,k) for k,v in sortedscores[:value]])
     return listing
